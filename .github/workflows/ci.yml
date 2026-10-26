@@ -1,0 +1,32 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck bin/idle-poweroff install.sh uninstall.sh test/run-tests.sh test/e2e-n8n.sh
+      - name: unit tests
+        run: bash test/run-tests.sh
+      - name: workflow template is up to date
+        run: |
+          python3 tools/gen_workflow.py | diff - n8n/wake-on-demand.workflow.json
+          python3 tools/gen_workflow.py --mac 4c:ed:fb:91:9d:33 --broadcast 10.10.10.255 \
+            --health-url http://10.10.10.100:8088/health | diff - examples/billiron/wake-on-demand.workflow.json
+
+  e2e:
+    # Verified locally with rootless podman on Ubuntu; not yet proven on GitHub-hosted runners,
+    # so it does not block merges until it has been green once.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: n8n end-to-end (real n8n + n8n-nodes-wol + fake host)
+        run: |
+          sudo apt-get install -y podman
+          bash test/e2e-n8n.sh

@@ -1,0 +1,8 @@
+# /etc/netplan/99-billiron-wol.yaml (already applied on billiron)
+network:
+  version: 2
+  ethernets:
+    enp4s0:
+      match:
+        macaddress: 4c:ed:fb:91:9d:33
+      wakeonlan: true

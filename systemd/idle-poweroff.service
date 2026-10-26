@@ -1,0 +1,6 @@
+[Unit]
+Description=Power off after sustained idle
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/idle-poweroff run

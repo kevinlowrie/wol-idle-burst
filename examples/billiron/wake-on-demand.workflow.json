@@ -1,0 +1,481 @@
+{
+  "id": "wolWakeOnDemand01",
+  "name": "Wake on demand (WoL)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wake-on-demand",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Wake request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        240
+      ],
+      "webhookId": "wol-wake-on-demand"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-mac",
+              "name": "mac",
+              "value": "4c:ed:fb:91:9d:33",
+              "type": "string"
+            },
+            {
+              "id": "cfg-broadcastAddress",
+              "name": "broadcastAddress",
+              "value": "10.10.10.255",
+              "type": "string"
+            },
+            {
+              "id": "cfg-wolPort",
+              "name": "wolPort",
+              "value": 9,
+              "type": "number"
+            },
+            {
+              "id": "cfg-healthUrl",
+              "name": "healthUrl",
+              "value": "http://10.10.10.100:8088/health",
+              "type": "string"
+            },
+            {
+              "id": "cfg-pollSeconds",
+              "name": "pollSeconds",
+              "value": 10,
+              "type": "number"
+            },
+            {
+              "id": "cfg-maxPolls",
+              "name": "maxPolls",
+              "value": 36,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        200,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Config').first().json.healthUrl }}",
+        "options": {
+          "timeout": 3000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Already up?",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        240
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "up-already",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Up already",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: \"up\", woke: false }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Respond already up",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        820,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "macAddress": "={{ $('Config').first().json.mac }}",
+        "broadcastAddress": "={{ $('Config').first().json.broadcastAddress }}",
+        "port": "={{ $('Config').first().json.wolPort }}",
+        "repeatCount": 3,
+        "delayBetweenPackets": 200
+      },
+      "name": "Send magic packet",
+      "type": "n8n-nodes-wol.wakeOnLan",
+      "typeVersion": 1,
+      "position": [
+        820,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "caller-waits",
+              "leftValue": "={{ $('Wake request').first().json.query.wait }}",
+              "rightValue": "false",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Caller waits?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: \"wake-sent\", woke: true }) }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "name": "Respond wake sent",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1260,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ $('Config').first().json.pollSeconds }}",
+        "unit": "seconds"
+      },
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1260,
+        300
+      ],
+      "webhookId": "wol-wake-on-demand-wait"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Config').first().json.healthUrl }}",
+        "options": {
+          "timeout": 3000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Poll health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1480,
+        300
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "booted",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Booted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: \"up\", woke: true }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Respond ready",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1920,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "keep-waiting",
+              "leftValue": "={{ $runIndex }}",
+              "rightValue": "={{ $('Config').first().json.maxPolls }}",
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Keep waiting?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: \"timeout\", hint: \"magic packet sent but the host did not pass the health check in time\" }) }}",
+        "options": {
+          "responseCode": 504
+        }
+      },
+      "name": "Respond timeout",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2140,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Wake request": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Already up?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already up?": {
+      "main": [
+        [
+          {
+            "node": "Up already",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Up already": {
+      "main": [
+        [
+          {
+            "node": "Respond already up",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send magic packet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send magic packet": {
+      "main": [
+        [
+          {
+            "node": "Caller waits?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Caller waits?": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond wake sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Poll health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll health": {
+      "main": [
+        [
+          {
+            "node": "Booted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Booted?": {
+      "main": [
+        [
+          {
+            "node": "Respond ready",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Keep waiting?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep waiting?": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond timeout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

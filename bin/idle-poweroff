@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# idle-poweroff: power the host off after a sustained idle period.
+#   run                 one check pass (called by idle-poweroff.timer)
+#   status              print the current busy/idle verdict and why
+#   keepawake [hours]   postpone auto-poweroff (whole hours, default 4)
+set -u
+
+# Overridable for tests.
+CONF=${IDLE_POWEROFF_CONF:-/etc/idle-poweroff/idle-poweroff.conf}
+STATE_DIR=${IDLE_POWEROFF_STATE_DIR:-/var/lib/idle-poweroff}
+POWEROFF_CMD=${IDLE_POWEROFF_CMD:-systemctl poweroff}
+PROC_DIR=${IDLE_POWEROFF_PROC_DIR:-/proc}
+
+# Defaults; overridden by $CONF.
+DRY_RUN=1
+IDLE_MINUTES=30
+BOOT_GRACE_MINUTES=20
+GPU_UTIL_MAX=5
+LOAD5_MAX=12
+WATCH_PORTS=""
+IGNORE_SESSIONS=0
+INHIBIT_FILE=/etc/idle-poweroff/no-autooff
+# shellcheck source=/dev/null
+[ -r "$CONF" ] && . "$CONF"
+
+IDLE_SINCE=$STATE_DIR/idle_since
+KEEPAWAKE=$STATE_DIR/keepawake
+mkdir -p "$STATE_DIR"
+
+busy_reasons() {
+  local up p hours
+  up=$(cut -d. -f1 "$PROC_DIR/uptime")
+  [ "$up" -lt $((BOOT_GRACE_MINUTES * 60)) ] && echo "boot grace (${up}s up)"
+  [ -e "$INHIBIT_FILE" ] && echo "inhibit file $INHIBIT_FILE"
+
+  if [ -e "$KEEPAWAKE" ]; then
+    hours=$(cat "$KEEPAWAKE" 2>/dev/null)
+    [ -n "$(find "$KEEPAWAKE" -mmin "-$(awk -v h="${hours:-0}" 'BEGIN { print int(h * 60) }')" 2>/dev/null)" ] && echo "keepawake active"
+  fi
+
+  if command -v nvidia-smi >/dev/null; then
+    nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null |
+      awk -v max="$GPU_UTIL_MAX" '$1 + 0 > max { f = 1 } END { exit !f }' && echo "GPU utilization > ${GPU_UTIL_MAX}%"
+  fi
+
+  for p in $WATCH_PORTS; do
+    [ -n "$(ss -Htn state established "( sport = :$p )" 2>/dev/null)" ] && echo "client connected on :$p"
+  done
+
+  awk -v max="$LOAD5_MAX" '$2 + 0 > max { f = 1 } END { exit !f }' "$PROC_DIR/loadavg" && echo "load5 > $LOAD5_MAX"
+  pgrep -x Runner.Worker >/dev/null && echo "GitHub Actions job running"
+  pgrep -x 'apt-get|apt|dpkg' >/dev/null && echo "package manager running"
+  command -v virsh >/dev/null && [ -n "$(virsh -q list --state-running 2>/dev/null)" ] && echo "libvirt VM running"
+  if command -v podman >/dev/null && [ -n "${IGNORE_CONTAINERS_MATCHING-}" ]; then
+    podman ps --format '{{.Names}}' 2>/dev/null | grep -qvE "$IGNORE_CONTAINERS_MATCHING" && echo "container running"
+  fi
+  if [ "$IGNORE_SESSIONS" != 1 ] && [ -n "$(loginctl list-sessions --no-legend 2>/dev/null)" ]; then
+    echo "logged-in session"
+  fi
+  return 0
+}
+
+now() { date +%s; }
+
+case "${1:-run}" in
+  status)
+    reasons=$(busy_reasons)
+    if [ -n "$reasons" ]; then
+      echo "BUSY:"
+      # shellcheck disable=SC2001
+      sed 's/^/  - /' <<<"$reasons"
+    else
+      echo "IDLE"
+    fi
+    [ -r "$IDLE_SINCE" ] && echo "idle for $((($(now) - $(cat "$IDLE_SINCE")) / 60)) min (poweroff at ${IDLE_MINUTES} min, DRY_RUN=$DRY_RUN)"
+    exit 0
+    ;;
+  keepawake)
+    echo "${2:-4}" >"$KEEPAWAKE"
+    touch "$KEEPAWAKE"
+    echo "auto-poweroff postponed for ${2:-4}h"
+    ;;
+  run)
+    if [ -n "$(busy_reasons)" ]; then
+      rm -f "$IDLE_SINCE"
+      exit 0
+    fi
+    [ -e "$IDLE_SINCE" ] || now >"$IDLE_SINCE"
+    idle_min=$((($(now) - $(cat "$IDLE_SINCE")) / 60))
+    [ "$idle_min" -lt "$IDLE_MINUTES" ] && exit 0
+    if [ "$DRY_RUN" = 1 ]; then
+      logger -t idle-poweroff "DRY_RUN: idle ${idle_min} min, would power off"
+    else
+      logger -t idle-poweroff "idle ${idle_min} min, powering off"
+      rm -f "$IDLE_SINCE"
+      # shellcheck disable=SC2086
+      $POWEROFF_CMD
+    fi
+    ;;
+  *)
+    echo "usage: $0 run|status|keepawake [hours]" >&2
+    exit 2
+    ;;
+esac
