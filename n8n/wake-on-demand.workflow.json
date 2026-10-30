@@ -14,9 +14,79 @@
       "typeVersion": 2,
       "position": [
         0,
-        240
+        160
       ],
       "webhookId": "wol-wake-on-demand"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "name": "Called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-wait",
+              "name": "wait",
+              "value": "={{ $json.query.wait !== \"false\" }}",
+              "type": "boolean"
+            },
+            {
+              "id": "cfg-viaWebhook",
+              "name": "viaWebhook",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "name": "From webhook",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        200,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-wait",
+              "name": "wait",
+              "value": "={{ $json.wait !== false && $json.wait !== \"false\" }}",
+              "type": "boolean"
+            },
+            {
+              "id": "cfg-viaWebhook",
+              "name": "viaWebhook",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "name": "From workflow",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        200,
+        380
+      ]
     },
     {
       "parameters": {
@@ -60,14 +130,15 @@
             }
           ]
         },
+        "includeOtherFields": true,
         "options": {}
       },
       "name": "Config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        200,
-        240
+        420,
+        270
       ]
     },
     {
@@ -87,8 +158,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        400,
-        240
+        620,
+        270
       ],
       "onError": "continueRegularOutput"
     },
@@ -119,23 +190,41 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        600,
-        240
+        820,
+        270
       ]
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: \"up\", woke: false }) }}",
-        "options": {
-          "responseCode": 200
-        }
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-status",
+              "name": "status",
+              "value": "up",
+              "type": "string"
+            },
+            {
+              "id": "cfg-woke",
+              "name": "woke",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "cfg-httpCode",
+              "name": "httpCode",
+              "value": 200,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
       },
-      "name": "Respond already up",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
+      "name": "Result: already up",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
       "position": [
-        820,
+        1040,
         120
       ]
     },
@@ -151,8 +240,8 @@
       "type": "n8n-nodes-wol.wakeOnLan",
       "typeVersion": 1,
       "position": [
-        820,
-        360
+        1040,
+        400
       ]
     },
     {
@@ -166,7 +255,7 @@
           "conditions": [
             {
               "id": "caller-waits",
-              "leftValue": "={{ $('Wake request').first().json.query.wait }}",
+              "leftValue": "={{ String($('Config').first().json.wait) }}",
               "rightValue": "false",
               "operator": {
                 "type": "string",
@@ -182,24 +271,42 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1040,
-        360
+        1260,
+        400
       ]
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: \"wake-sent\", woke: true }) }}",
-        "options": {
-          "responseCode": 202
-        }
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-status",
+              "name": "status",
+              "value": "wake-sent",
+              "type": "string"
+            },
+            {
+              "id": "cfg-woke",
+              "name": "woke",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "cfg-httpCode",
+              "name": "httpCode",
+              "value": 202,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
       },
-      "name": "Respond wake sent",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
+      "name": "Result: wake sent",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
       "position": [
-        1260,
-        480
+        1480,
+        540
       ]
     },
     {
@@ -212,8 +319,8 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        1260,
-        300
+        1480,
+        340
       ],
       "webhookId": "wol-wake-on-demand-wait"
     },
@@ -234,8 +341,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1480,
-        300
+        1700,
+        340
       ],
       "onError": "continueRegularOutput"
     },
@@ -266,24 +373,42 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1700,
-        300
+        1920,
+        340
       ]
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: \"up\", woke: true }) }}",
-        "options": {
-          "responseCode": 200
-        }
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-status",
+              "name": "status",
+              "value": "up",
+              "type": "string"
+            },
+            {
+              "id": "cfg-woke",
+              "name": "woke",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "cfg-httpCode",
+              "name": "httpCode",
+              "value": 200,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
       },
-      "name": "Respond ready",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
+      "name": "Result: ready",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
       "position": [
-        1920,
-        200
+        2140,
+        240
       ]
     },
     {
@@ -313,29 +438,143 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1920,
-        400
+        2140,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-status",
+              "name": "status",
+              "value": "timeout",
+              "type": "string"
+            },
+            {
+              "id": "cfg-woke",
+              "name": "woke",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "cfg-httpCode",
+              "name": "httpCode",
+              "value": 504,
+              "type": "number"
+            },
+            {
+              "id": "cfg-hint",
+              "name": "hint",
+              "value": "magic packet sent but the host did not pass the health check in time",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Result: timeout",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2360,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "via-webhook",
+              "leftValue": "={{ String($('Config').first().json.viaWebhook) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Via webhook?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2600,
+        300
       ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: \"timeout\", hint: \"magic packet sent but the host did not pass the health check in time\" }) }}",
+        "responseBody": "={{ JSON.stringify({ status: $json.status, woke: $json.woke, hint: $json.hint }) }}",
         "options": {
-          "responseCode": 504
+          "responseCode": "={{ $json.httpCode }}"
         }
       },
-      "name": "Respond timeout",
+      "name": "Respond to webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        2140,
-        500
+        2840,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Return to calling workflow",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2840,
+        400
       ]
     }
   ],
   "connections": {
     "Wake request": {
+      "main": [
+        [
+          {
+            "node": "From webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "From workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "From webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "From workflow": {
       "main": [
         [
           {
@@ -372,7 +611,7 @@
       "main": [
         [
           {
-            "node": "Respond already up",
+            "node": "Result: already up",
             "type": "main",
             "index": 0
           }
@@ -408,7 +647,7 @@
         ],
         [
           {
-            "node": "Respond wake sent",
+            "node": "Result: wake sent",
             "type": "main",
             "index": 0
           }
@@ -441,7 +680,7 @@
       "main": [
         [
           {
-            "node": "Respond ready",
+            "node": "Result: ready",
             "type": "main",
             "index": 0
           }
@@ -466,7 +705,69 @@
         ],
         [
           {
-            "node": "Respond timeout",
+            "node": "Result: timeout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: already up": {
+      "main": [
+        [
+          {
+            "node": "Via webhook?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: wake sent": {
+      "main": [
+        [
+          {
+            "node": "Via webhook?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: ready": {
+      "main": [
+        [
+          {
+            "node": "Via webhook?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result: timeout": {
+      "main": [
+        [
+          {
+            "node": "Via webhook?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Via webhook?": {
+      "main": [
+        [
+          {
+            "node": "Respond to webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return to calling workflow",
             "type": "main",
             "index": 0
           }

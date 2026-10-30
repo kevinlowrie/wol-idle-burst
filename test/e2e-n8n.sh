@@ -42,10 +42,13 @@ echo "== installing $WOL_PKG into n8n's custom nodes dir"
 
 python3 "$root/tools/gen_workflow.py" --mac "$TEST_MAC" --broadcast "$TEST_BROADCAST" --wol-port "$UDP_PORT" \
   --health-url "http://127.0.0.1:$HEALTH_PORT/health" --poll-seconds 2 --max-polls 6 -o "$D/wf.json"
+python3 "$root/tools/gen_workflow.py" --caller webhook -o "$D/caller.json"
 
 echo "== importing + publishing workflow"
 "${ctr[@]}" -v "$D/wf.json:/wf.json:ro" "$N8N_IMAGE" import:workflow --input=/wf.json 2>&1 | tail -2
+"${ctr[@]}" -v "$D/caller.json:/caller.json:ro" "$N8N_IMAGE" import:workflow --input=/caller.json 2>&1 | tail -2
 "${ctr[@]}" "$N8N_IMAGE" publish:workflow --id=wolWakeOnDemand01 2>&1 | tail -2
+"${ctr[@]}" "$N8N_IMAGE" publish:workflow --id=wolExampleCaller01 2>&1 | tail -2
 
 echo "== starting n8n on 127.0.0.1:$N8N_PORT"
 podman run -d --name "$NAME" --network host --userns=keep-id:uid=1000,gid=1000 --user 1000:1000 \
@@ -55,7 +58,10 @@ podman run -d --name "$NAME" --network host --userns=keep-id:uid=1000,gid=1000 -
   "$N8N_IMAGE" >/dev/null
 # /healthz goes green before published workflows are activated; wait for the webhook registration itself.
 # (capture first: `podman logs | grep -q` can die of SIGPIPE under pipefail and look like "not found")
-registered() { local logs; logs=$(podman logs "$NAME" 2>&1); grep -q 'Added webhook "Wake request"' <<<"$logs"; }
+registered() {
+  local logs; logs=$(podman logs "$NAME" 2>&1)
+  grep -q 'Added webhook "Wake request"' <<<"$logs" && grep -q 'Added webhook "Webhook trigger"' <<<"$logs"
+}
 for _ in $(seq 90); do registered && break; sleep 1; done
 registered || { echo "webhook never registered"; podman logs "$NAME" 2>&1 | tail -30; exit 1; }
 
@@ -92,6 +98,30 @@ echo "== scenario D: ?wait=false -> 202 immediately"
 : >"$D/events"; fake --no-boot --lifetime 15
 code=$(call "?wait=false"); body=$(cat "$D/body")
 assert "D: returns 202 wake-sent ($code $body)" body_has 202 wake-sent
+stop_fake
+
+caller_url=http://127.0.0.1:$N8N_PORT/webhook/run-my-job
+call_via_workflow() { curl -s -m 40 -o "$D/body" -w '%{http_code}' -X POST "$caller_url"; }
+
+echo "== scenario E: another workflow's Execute Workflow node, host already up"
+: >"$D/events"; fake --already-up --lifetime 20
+code=$(call_via_workflow); body=$(cat "$D/body")
+assert "E: caller gets status up, woke false ($code $body)" body_has 200 '"status":"up"'
+assert "E: no magic packet sent" [ "$(count magic-packet)" = 0 ]
+stop_fake
+
+echo "== scenario F: Execute Workflow node, host asleep -> wake -> boots after 3 s"
+: >"$D/events"; fake --boot-delay 3 --lifetime 30
+code=$(call_via_workflow); body=$(cat "$D/body")
+assert "F: caller continues after boot with woke true ($code $body)" body_has 200 '"woke":true'
+assert "F: valid magic packet received ($(count magic-packet) x)" [ "$(count magic-packet)" -ge 1 ]
+stop_fake
+
+echo "== scenario G: Execute Workflow node, host never boots -> caller's run fails"
+: >"$D/events"; fake --no-boot --lifetime 30
+code=$(call_via_workflow); body=$(cat "$D/body")
+assert "G: caller is stopped with an error ($code)" [ "$code" = 500 ]
+assert "G: magic packet was still sent" [ "$(count magic-packet)" -ge 1 ]
 stop_fake
 
 echo; echo "$pass passed, $fail failed"

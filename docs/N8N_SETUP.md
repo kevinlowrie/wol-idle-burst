@@ -74,11 +74,30 @@ curl -sS -X POST -H 'X-Wake-Token: <token>' 'https://n8n.example.com/webhook/wak
 |---|---|
 | `200 {"status":"up","woke":false}` | was already up, nothing sent |
 | `200 {"status":"up","woke":true}` | packet sent and the host passed the health check |
-| `504 {"status":"timeout"}` | packet sent, host never became healthy within `maxPolls` |
+| `504 {"status":"timeout","woke":true,"hint":...}` | packet sent, host never became healthy within `maxPolls` |
 | `202 {"status":"wake-sent"}` | `?wait=false` |
 
+## Launch it from another workflow (Execute Workflow node)
+The wake workflow has a second entry point, **Called by another workflow**, so any workflow can start the server and wait for it with an *Execute Workflow* node. No webhook, token or HTTP hop is involved.
+
+1. Import and **publish** `n8n/wake-on-demand.workflow.json` (workflow id `wolWakeOnDemand01`).
+2. In your workflow add *Execute Workflow* -> Source *Database* -> pick **Wake on demand (WoL)**, and leave *Wait for sub-workflow* on. `n8n/example-caller.workflow.json` is a ready-made example: wake, then branch on the result.
+3. The node returns one item and your workflow continues when the host is healthy (or when waiting gave up):
+
+   | Field | Meaning |
+   |---|---|
+   | `status` | `up`, `timeout`, or `wake-sent` |
+   | `woke` | `true` if a magic packet was sent |
+   | `httpCode` | the code a webhook caller would have received (200, 202, 504) |
+   | `hint` | only on `timeout` |
+
+   Branch on `status`: `up` means go ahead, anything else means stop (the example uses *Stop and Error*).
+4. To return immediately instead of waiting, feed the node an item with `wait: false` (for example from a *Set* node). `status` is then `wake-sent` and your workflow must check health itself.
+
+The calling workflow stays running while the host boots (typically minutes), so do not put a short execution timeout on it.
+
 ## Triggers
-Replace or add to the Webhook node: Schedule (wake at 08:00), GitHub Trigger on `workflow_job` queued (wake the self-hosted runner), Telegram/Slack command, or an *Execute Workflow* call from another workflow, then continue your job after the host is up.
+Replace or add to the Webhook node: Schedule (wake at 08:00), GitHub Trigger on `workflow_job` queued (wake the self-hosted runner), Telegram/Slack command, or an *Execute Workflow* call from another workflow (above), then continue your job after the host is up.
 
 ## Keeping it up during long jobs
 The idle detector treats an established client connection, GPU load, a logged-in session, or a CI job as busy. For anything else: `ssh host sudo idle-poweroff keepawake 6` (whole hours), or drop `/etc/idle-poweroff/no-autooff`.

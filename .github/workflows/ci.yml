@@ -18,6 +18,7 @@ jobs:
           python3 tools/gen_workflow.py | diff - n8n/wake-on-demand.workflow.json
           python3 tools/gen_workflow.py --mac 4c:ed:fb:91:9d:33 --broadcast 10.10.10.255 \
             --health-url http://10.10.10.100:8088/health | diff - examples/billiron/wake-on-demand.workflow.json
+          python3 tools/gen_workflow.py --caller manual | diff - n8n/example-caller.workflow.json
 
   e2e:
     # Verified locally with rootless podman on Ubuntu; not yet proven on GitHub-hosted runners,
