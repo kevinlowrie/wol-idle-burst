@@ -1,7 +1,13 @@
-# wol-idle-poweroff
+# wol-idle-burst
 
-Run a power-hungry box (GPU inference, render, CI builder) **only when you need it**.
+Run a power-hungry box (GPU inference, render, CI builder) **only when you need it**, as a burst-compute node in a homelab.
 n8n wakes it with Wake-on-LAN, waits until it is actually healthy, and the box powers itself off again after it has been idle.
+
+> **Naming.** The project (this repository) is **wol-idle-burst**. It was first drafted as `wol-idle-poweroff`; the name changed to describe how it is used, a box that bursts on for a job and then goes back to sleep. The host-side command, its files and its systemd units keep the name **`idle-poweroff`** (`/usr/local/sbin/idle-poweroff`, `/etc/idle-poweroff/`, `idle-poweroff.timer`), and nothing in an existing install needs to change. The git checkout may still be in a directory called `wol-idle-poweroff`; the directory name does not matter.
+
+```bash
+git clone https://github.com/kevinlowrie/wol-idle-burst && cd wol-idle-burst
+```
 
 ```
 caller --POST--> n8n webhook --health?--> up? ──yes──> 200 woke:false

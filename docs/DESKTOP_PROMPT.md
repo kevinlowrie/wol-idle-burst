@@ -21,7 +21,7 @@ Facts you can rely on
   Packet: 6 x 0xFF then the MAC 16 times, UDP port 9, sent to the subnet's directed broadcast address.
 - The server needs no inbound firewall rule for WoL (the NIC handles it while powered off).
 - The workflow template is the file `n8n/wake-on-demand.workflow.json` in the repo
-  https://github.com/<<owner>>/wol-idle-poweroff (or the copy I give you). It uses the community node
+  https://github.com/kevinlowrie/wol-idle-burst (or the copy I give you). It uses the community node
   `n8n-nodes-wol` (MIT, no dependencies) and has one "Config" node holding every host-specific value.
 - Webhook contract: POST /webhook/wake-on-demand ->
   200 {"status":"up","woke":false}  already up, nothing sent
